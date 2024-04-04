@@ -14,7 +14,7 @@ from collections import OrderedDict
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from apple_cryptography import *
+from apple_cryptography import retrieveICloudKey, getAppleDSIDandSearchPartyToken, getOTPHeaders, getCurrentTimes
 
 import logging
 logger = logging.getLogger()
