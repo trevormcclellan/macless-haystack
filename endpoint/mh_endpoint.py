@@ -14,7 +14,7 @@ from collections import OrderedDict
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from register import apple_cryptography, pypush_gsa_icloud
+from apple_cryptography import *
 
 import logging
 logger = logging.getLogger()
@@ -94,9 +94,27 @@ class ServerHandler(BaseHTTPRequestHandler):
         data = {"search": [
             {"startDate": 1, "ids": list(body['ids'])}]}
 
+        iCloud_decryptionkey = retrieveICloudKey()
+        AppleDSID, searchPartyToken = getAppleDSIDandSearchPartyToken(
+            iCloud_decryptionkey)
+        machineID, oneTimePassword = getOTPHeaders()
+        UTCTime, Timezone, unixEpoch = getCurrentTimes()
+
+        request_headers = {
+            'Authorization': "Basic %s" % (base64.b64encode((AppleDSID + ':' + searchPartyToken).encode('ascii')).decode('ascii')),
+            'X-Apple-I-MD': "%s" % (oneTimePassword),
+            'X-Apple-I-MD-RINFO': '17106176',
+            'X-Apple-I-MD-M': "%s" % (machineID),
+            'X-Apple-I-TimeZone': "%s" % (Timezone),
+            'X-Apple-I-Client-Time': "%s" % (UTCTime),
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-BA-CLIENT-TIMESTAMP': "%s" % (unixEpoch)
+        }
+
         try:
-            r = requests.post("https://gateway.icloud.com/acsnservice/fetch",  auth=getAuth(regenerate=False, second_factor='sms'),
-                              headers=pypush_gsa_icloud.generate_anisette_headers(),
+            r = requests.post("https://gateway.icloud.com/acsnservice/fetch",
+                              headers=request_headers,
                               json=data)
             logger.debug('Return from fetch service:')
             logger.debug(r.content.decode())
@@ -135,28 +153,7 @@ class ServerHandler(BaseHTTPRequestHandler):
         clientTimestamp = int(datetime.now().strftime('%s'))
         return clientTime, time.tzname[1], clientTimestamp
 
-
-def getAuth(regenerate=False, second_factor='sms'):
-    if os.path.exists(config.getConfigFile()) and not regenerate:
-        with open(config.getConfigFile(), "r") as f:
-            j = json.load(f)
-    else:
-        mobileme = pypush_gsa_icloud.icloud_login_mobileme(username=config.USER, password=config.PASS,
-                                                           second_factor=second_factor)
-        logger.debug('Mobileme result: ' + mobileme)
-        j = {'dsid': mobileme['dsid'], 'searchPartyToken': mobileme['delegates']
-             ['com.apple.mobileme']['service-data']['tokens']['searchPartyToken']}
-        with open(config.getConfigFile(), "w") as f:
-            json.dump(j, f)
-    return (j['dsid'], j['searchPartyToken'])
-
-
 if __name__ == "__main__":
-    logging.debug(f'Searching for token at ' + config.getConfigFile())
-    if not os.path.exists(config.getConfigFile()):
-        logging.info(f'No auth-token found.')
-        apple_cryptography.registerDevice()
-
     Handler = ServerHandler
 
     httpd = HTTPServer((config.getBindingAddress(), config.getPort()), Handler)
