@@ -12,7 +12,15 @@ class DecryptReports {
       FindMyReport report, Uint8List key) async {
     final curveDomainParam = ECCurve_secp224r1();
 
-    final payloadData = report.payload;
+    var payloadData = report.payload;
+    /// Fix decryption for new report format
+    /// See: https://github.com/biemster/FindMy/issues/52
+    if (payloadData.length > 88) {
+      final newPayloadData = Uint8List(payloadData.length - 1);
+      newPayloadData.setRange(0, 5, payloadData);
+      newPayloadData.setRange(5, payloadData.length - 1, payloadData.sublist(6));
+      payloadData = newPayloadData;
+    }
     final ephemeralKeyBytes = payloadData.sublist(
         payloadData.length - 16 - 10 - 57, payloadData.length - 16 - 10);
     final encData = payloadData.sublist(payloadData.length - 16 - 10, payloadData.length - 16);
